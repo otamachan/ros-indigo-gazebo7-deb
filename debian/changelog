@@ -1,0 +1,5 @@
+ros-indigo-gazebo7 (7.4.0-0~trusty1) trusty; urgency=medium
+
+  * Rename package and change install location
+
+ -- Tamaki Nishino <otamachan@gmail.com>  Tue, 08 Nov 2016 21:14:57 +0900
