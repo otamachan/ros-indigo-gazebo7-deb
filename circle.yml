@@ -1,0 +1,22 @@
+dependencies:
+  override:
+    - sudo apt-get update
+    - sudo apt-get install apt-utils devscripts equivs git-buildpackage
+    - mkdir -p /tmp/repo
+    - wget https://github.com/otamachan/ros-indigo-sdformat4-deb/releases/download/debian%2F4.2.0-0_trusty1/ros-indigo-sdformat4_4.2.0-0.trusty1_amd64.deb -P /tmp/repo
+    - (cd /tmp/repo ; apt-ftparchive packages . > Packages)
+    - sudo /bin/sh -c 'echo "deb http://packages.osrfoundation.org/gazebo/ubuntu-stable trusty main" > /etc/apt/sources.list.d/gazebo.list'
+    - sudo /bin/sh -c 'echo "deb [trusted=yes] file:///tmp/repo ./" > /etc/apt/sources.list.d/local.list'
+    - sudo apt-get update
+    - sudo mk-build-deps -i
+    - sudo rm -f *.deb
+    - wget https://github.com/aktau/github-release/releases/download/v0.6.2/linux-amd64-github-release.tar.bz2 -O - | tar xfj - -C /tmp
+test:
+  override:
+    - DEB_BUILD_OPTIONS="parallel=2" git-buildpackage -us -uc --git-ignore-new --git-ignore-branch
+deployment:
+  release:
+    tag: /debian.*/
+    commands:
+      - /tmp/bin/linux/amd64/github-release release -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -t ${CIRCLE_TAG}
+      - /tmp/bin/linux/amd64/github-release upload -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -t ${CIRCLE_TAG} -f $(ls ../*.deb) -n $(basename $(ls ../*.deb))
