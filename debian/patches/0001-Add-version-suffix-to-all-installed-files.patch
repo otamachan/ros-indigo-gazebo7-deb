@@ -1,0 +1,124 @@
+From: Tamaki Nishino <otamachan@gmail.com>
+Date: Wed, 30 Nov 2016 22:55:56 +0900
+Subject: Add version suffix to all installed files
+
+---
+ CMakeLists.txt               | 19 +++++++++++--------
+ cmake/GazeboUtils.cmake      |  7 +++++++
+ cmake/gazebo-config.cmake.in |  5 +++--
+ gazebo/gazebo_main.cc        |  4 ++--
+ 4 files changed, 23 insertions(+), 12 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 2bb212c..dd674f2 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -297,7 +297,7 @@ else (build_errors)
+   configure_file(${CMAKE_SOURCE_DIR}/cmake/setup.sh.in ${PROJECT_BINARY_DIR}/setup.sh @ONLY)
+   install(FILES ${CMAKE_CURRENT_BINARY_DIR}/setup.sh DESTINATION ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATAROOTDIR}/gazebo-${GAZEBO_MAJOR_VERSION}/)
+   # Also install the setup.sh in an unversioned location
+-  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/setup.sh DESTINATION ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATAROOTDIR}/gazebo/)
++  # install(FILES ${CMAKE_CURRENT_BINARY_DIR}/setup.sh DESTINATION ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATAROOTDIR}/gazebo/)
+ 
+ 
+   if (DEFINED CMAKE_CXX_FLAGS)
+@@ -348,8 +348,9 @@ else (build_errors)
+   endforeach(b)
+ 
+   foreach (pkgconfig ${pkgconfig_files})
+-    configure_file(${CMAKE_SOURCE_DIR}/cmake/pkgconfig/${pkgconfig}.in ${CMAKE_CURRENT_BINARY_DIR}/cmake/pkgconfig/${pkgconfig}.pc @ONLY)
+-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/cmake/pkgconfig/${pkgconfig}.pc DESTINATION ${LIB_INSTALL_DIR}/pkgconfig COMPONENT pkgconfig)
++    string(REPLACE gazebo "gazebo${GAZEBO_MAJOR_VERSION}" _pkgconfig ${pkgconfig})
++    configure_file(${CMAKE_SOURCE_DIR}/cmake/pkgconfig/${pkgconfig}.in ${CMAKE_CURRENT_BINARY_DIR}/cmake/pkgconfig/${_pkgconfig}.pc @ONLY)
++    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/cmake/pkgconfig/${_pkgconfig}.pc DESTINATION ${LIB_INSTALL_DIR}/pkgconfig COMPONENT pkgconfig)
+   endforeach()
+ 
+   ########################################
+@@ -398,21 +399,23 @@ else (build_errors)
+ 
+   set(cmake_conf_file "cmake/gazebo-config.cmake")
+   set(cmake_conf_version_file "cmake/gazebo-config-version.cmake")
+-  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/${cmake_conf_file}.in" "${CMAKE_CURRENT_BINARY_DIR}/${cmake_conf_file}" @ONLY)
++  string(REPLACE gazebo "gazebo${GAZEBO_MAJOR_VERSION}" _cmake_conf_file ${cmake_conf_file})
++  string(REPLACE gazebo "gazebo${GAZEBO_MAJOR_VERSION}" _cmake_conf_version_file ${cmake_conf_version_file})
++  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/${cmake_conf_file}.in" "${CMAKE_CURRENT_BINARY_DIR}/${_cmake_conf_file}" @ONLY)
+   # Use write_basic_package_version_file to generate a ConfigVersion file that
+   # allow users of gazebo to specify the API or version to depend on
+   # TODO: keep this instruction until deprecate Ubuntu/Precise and update with
+   # https://github.com/Kitware/CMake/blob/v2.8.8/Modules/CMakePackageConfigHelpers.cmake
+   include(WriteBasicConfigVersionFile)
+   write_basic_config_version_file(
+-      ${CMAKE_CURRENT_BINARY_DIR}/${cmake_conf_version_file}
++      ${CMAKE_CURRENT_BINARY_DIR}/${_cmake_conf_version_file}
+       VERSION "${GAZEBO_VERSION_FULL}"
+       COMPATIBILITY SameMajorVersion)
+   install(FILES
+-            ${CMAKE_CURRENT_BINARY_DIR}/${cmake_conf_file}
+-            ${CMAKE_CURRENT_BINARY_DIR}/${cmake_conf_version_file}
++            ${CMAKE_CURRENT_BINARY_DIR}/${_cmake_conf_file}
++            ${CMAKE_CURRENT_BINARY_DIR}/${_cmake_conf_version_file}
+           DESTINATION
+-	    ${LIB_INSTALL_DIR}/cmake/${PROJECT_NAME_LOWER}/
++	    ${LIB_INSTALL_DIR}/cmake/${PROJECT_NAME_LOWER}${GAZEBO_MAJOR_VERSION}/
+ 	  COMPONENT cmake)
+   ########################################
+   # If present, load platform-specific build hooks.  This system is used,
+diff --git a/cmake/GazeboUtils.cmake b/cmake/GazeboUtils.cmake
+index 495f06c..4df2a8f 100644
+--- a/cmake/GazeboUtils.cmake
++++ b/cmake/GazeboUtils.cmake
+@@ -115,12 +115,19 @@ endmacro()
+ #################################################
+ macro (gz_install_library _name)
+   set_target_properties(${_name} PROPERTIES SOVERSION ${GAZEBO_MAJOR_VERSION} VERSION ${GAZEBO_VERSION_FULL})
++  if("${_name}" MATCHES "^libgazebo")
++    string(REPLACE libgazebo "gazebo${GAZEBO_MAJOR_VERSION}" _new_name ${_name})
++  else()
++    string(REPLACE gazebo "gazebo${GAZEBO_MAJOR_VERSION}" _new_name ${_name})
++  endif()
++  set_target_properties(${_name} PROPERTIES OUTPUT_NAME ${_new_name})
+   install (TARGETS ${_name} DESTINATION ${LIB_INSTALL_DIR} COMPONENT shlib)
+ endmacro ()
+ 
+ #################################################
+ macro (gz_install_executable _name)
+   set_target_properties(${_name} PROPERTIES VERSION ${GAZEBO_VERSION_FULL})
++  set_target_properties(${_name} PROPERTIES OUTPUT_NAME "${_name}${GAZEBO_MAJOR_VERSION}")
+   install (TARGETS ${_name} DESTINATION ${BIN_INSTALL_DIR})
+ endmacro ()
+ 
+diff --git a/cmake/gazebo-config.cmake.in b/cmake/gazebo-config.cmake.in
+index 4fbde8f..d1734f2 100644
+--- a/cmake/gazebo-config.cmake.in
++++ b/cmake/gazebo-config.cmake.in
+@@ -82,12 +82,13 @@ endif ()
+ 
+ foreach(lib @PKG_LIBRARIES@)
+   set(onelib "${lib}-NOTFOUND")
+-  find_library(onelib ${lib}
++  string(REPLACE gazebo gazebo7 _lib ${lib})
++  find_library(onelib ${_lib}
+     PATHS "@CMAKE_INSTALL_PREFIX@/@CMAKE_INSTALL_LIBDIR@"
+     NO_DEFAULT_PATH
+     )
+   if(NOT onelib)
+-    message(FATAL_ERROR "Library '${lib}' in package @PKG_NAME@ is not installed properly")
++    message(FATAL_ERROR "Library '${_lib}' in package @PKG_NAME@ is not installed properly")
+   endif()
+   list(APPEND @PKG_NAME@_LIBRARIES ${onelib})
+ endforeach()
+diff --git a/gazebo/gazebo_main.cc b/gazebo/gazebo_main.cc
+index 95146a3..cee9f0b 100644
+--- a/gazebo/gazebo_main.cc
++++ b/gazebo/gazebo_main.cc
+@@ -132,8 +132,8 @@ int main(int _argc, char **_argv)
+ 
+   char **argvServer = new char*[_argc+1];
+   char **argvClient = new char*[_argc+1];
+-  argvServer[0] = const_cast<char*>("gzserver");
+-  argvClient[0] = const_cast<char*>("gzclient");
++  argvServer[0] = const_cast<char*>("gzserver7");
++  argvClient[0] = const_cast<char*>("gzclient7");
+   for (int i = 1; i < _argc; ++i)
+   {
+     argvServer[i] = _argv[i];
